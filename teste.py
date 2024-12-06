@@ -3,92 +3,61 @@ import os
 from deepface import DeepFace
 import numpy as np
 
-def detect_faces(image_path, output_folder, person_name="Unknown"):
-    """
-    Detecta e recorta rostos de uma imagem.
-    Args:
-        image_path (str): Caminho da imagem de entrada.
-        output_folder (str): Caminho para salvar os rostos recortados.
-        person_name (str): Nome da pessoa (opcional, usado para nomear os arquivos).
-    Returns:
-        list: Lista de caminhos dos arquivos de rostos recortados.
-    """
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+class ImageProcessor:
+    def __init__(self, image_path):
+        self.image_path = image_path
+        self.image = cv2.imread(image_path)
+        if self.image is None:
+            raise ValueError(f"Não foi possível carregar {image_path}")
     
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    def convert_to_gray(self):
+        return cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
     
-    # Carrega a imagem
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"Não foi possível carregar {image_path}")
-        return []
+    def save_image(self, output_path):
+        cv2.imwrite(output_path, self.image)
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-
-    output_files = []
-    if len(faces) > 0:
-        for i, (x, y, w, h) in enumerate(faces):
-            face = image[y:y + h, x:x + w]
-            face_resized = cv2.resize(face, (200, 200))
-            output_path = os.path.join(output_folder, f'clipped_face_{person_name}_{i}.jpg')
-            cv2.imwrite(output_path, face_resized)
-            output_files.append(output_path)
-            print(f"Rosto {i + 1} salvo como '{output_path}'")
-    else:
-        print(f"Nenhum rosto detectado em {image_path}")
+class FaceDetector(ImageProcessor):
+    def __init__(self, image_path, output_folder, person_name="Unknown"):
+        super().__init__(image_path)
+        self.output_folder = output_folder
+        self.person_name = person_name
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     
-    return output_files
+    def detect_faces(self):
+        gray = self.convert_to_gray()
+        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        output_files = []
 
-def analyze_emotions(image_path):
-    """
-    Analisa as emoções de um rosto usando DeepFace.
-    Args:
-        image_path (str): Caminho para a imagem do rosto.
-    Returns:
-        dict: Resultados da análise de emoções.
-    """
-    try:
-        result = DeepFace.analyze(img_path=image_path, actions=['emotion'])
-        return result[0]['emotion']  # Retorna apenas as emoções
-    except Exception as e:
-        print(f"Erro ao analisar emoções para {image_path}: {e}")
-        return {}
+        if len(faces) > 0:
+            for i, (x, y, w, h) in enumerate(faces):
+                face = self.image[y:y + h, x:x + w]
+                face_resized = cv2.resize(face, (200, 200))
+                output_path = os.path.join(self.output_folder, f'clipped_face_{self.person_name}_{i}.jpg')
+                self.save_image(output_path)
+                output_files.append(output_path)
+                print(f"Rosto {i + 1} salvo como '{output_path}'")
+        else:
+            print(f"Nenhum rosto detectado em {self.image_path}")
+        
+        return output_files
 
-def pixelate_image(image_path, block_size=10):
-    """
-    Aplica um efeito de pixelização a uma imagem.
-    Args:
-        image_path (str): Caminho da imagem.
-        block_size (int): Tamanho dos blocos para pixelização.
-    Returns:
-        np.array: Imagem pixelada.
-    """
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"Não foi possível carregar {image_path}")
-        return None
+class EmotionAnalyzer(ImageProcessor):
+    def analyze_emotions(self):
+        try:
+            result = DeepFace.analyze(img_path=self.image_path, actions=['emotion'])
+            return result[0]['emotion']
+        except Exception as e:
+            print(f"Erro ao analisar emoções para {self.image_path}: {e}")
+            return {}
 
-    (h, w) = image.shape[:2]
-    temp = cv2.resize(image, (w // block_size, h // block_size), interpolation=cv2.INTER_LINEAR)
-    pixelated = cv2.resize(temp, (w, h), interpolation=cv2.INTER_NEAREST)
-    return pixelated
-
-def add_random_noise(image_path, noise_level=0.05):
-    """
-    Adiciona ruído aleatório a uma imagem.
-    Args:
-        image_path (str): Caminho da imagem.
-        noise_level (float): Intensidade do ruído.
-    Returns:
-        np.array: Imagem com ruído.
-    """
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"Não foi possível carregar {image_path}")
-        return None
-
-    noise = np.random.normal(0, 255 * noise_level, image.shape).astype(np.uint8)
-    noisy_image = cv2.add(image, noise)
-    return noisy_image
+class ImageEffect(ImageProcessor):
+    def pixelate(self, block_size=10):
+        (h, w) = self.image.shape[:2]
+        temp = cv2.resize(self.image, (w // block_size, h // block_size), interpolation=cv2.INTER_LINEAR)
+        pixelated = cv2.resize(temp, (w, h), interpolation=cv2.INTER_NEAREST)
+        return pixelated
+    
+    def add_noise(self, noise_level=0.05):
+        noise = np.random.normal(0, 255 * noise_level, self.image.shape).astype(np.uint8)
+        noisy_image = cv2.add(self.image, noise)
+        return noisy_image

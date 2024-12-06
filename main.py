@@ -12,13 +12,28 @@ from PIL import Image, ImageTk
 def browse_image():
     file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png")])
     if file_path:
-        global img_path
+        global img_path, original_image
         img_path = file_path
         img = cv2.imread(img_path)
+        original_image = img.copy()  # Salva a imagem original para restaurar depois
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Converter para RGB para o tkinter exibir corretamente
+        img = cv2.resize(img, (400, 400))  # Redimensionar a imagem para o tamanho exibido
         img = ImageTk.PhotoImage(Image.fromarray(img))
         panel.config(image=img)
         panel.image = img
+
+# Função para restaurar a imagem ao seu estado original
+def restore_image():
+    if not img_path or original_image is None:
+        messagebox.showerror("Erro", "Nenhuma imagem carregada.")
+        return
+
+    img = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (400, 400))  # Redimensionar para o tamanho exibido
+    img = ImageTk.PhotoImage(Image.fromarray(img))
+
+    panel.config(image=img)
+    panel.image = img
 
 # Função para aplicar DeepFace e mostrar emoções
 def recognize_emotions():
@@ -57,6 +72,7 @@ def pixelate_image():
 
     cv2.imwrite('pixelated_image.jpg', pixelated)
     img = cv2.cvtColor(pixelated, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (400, 400))  # Redimensionar para o tamanho menor
     img = ImageTk.PhotoImage(Image.fromarray(img))
 
     panel.config(image=img)
@@ -78,57 +94,51 @@ def add_random_noise():
 
     cv2.imwrite('noisy_image.jpg', noisy)
     img = cv2.cvtColor(noisy, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (400, 400))  # Redimensionar para o tamanho menor
     img = ImageTk.PhotoImage(Image.fromarray(img))
 
     panel.config(image=img)
     panel.image = img
 
-# Função para salvar a imagem
-def save_image():
-    if not img_path:
-        messagebox.showerror("Erro", "Nenhuma imagem carregada.")
-        return
-
-    save_path = filedialog.asksaveasfilename(defaultextension=".jpg", filetypes=[("Image files", "*.jpg;*.jpeg;*.png")])
-    if save_path:
-        img = cv2.imread(img_path)
-        cv2.imwrite(save_path, img)
-        messagebox.showinfo("Sucesso", "Imagem salva com sucesso!")
-
 # Configuração da interface Tkinter
 root = Tk()
 root.title("Reconhecimento de Emoções")
-root.geometry("800x600")
+root.geometry("600x700")  # Dimensão da janela
 
 img_path = None
+original_image = None  # Variável para armazenar a imagem original
 
 # Painel para exibir a imagem
 panel = Label(root)
-panel.pack(pady=20)
+panel.pack(pady=10)
+
+# Container para os botões, alinhando-os no centro
+button_frame = Frame(root)
+button_frame.pack(pady=20)
 
 # Botão para carregar imagem
-browse_button = Button(root, text="Browse", command=browse_image)
-browse_button.pack(side=LEFT, padx=20)
+browse_button = Button(button_frame, text="Pesquisar", command=browse_image, width=12)
+browse_button.grid(row=0, column=0, padx=10)
 
 # Botão para reconhecer emoções
-recognize_button = Button(root, text="Recognize", command=recognize_emotions)
-recognize_button.pack(side=LEFT, padx=20)
+recognize_button = Button(button_frame, text="Reconhecer", command=recognize_emotions, width=12)
+recognize_button.grid(row=0, column=1, padx=10)
+
+# Botão para restaurar imagem ao normal
+restore_button = Button(button_frame, text="Normal", command=restore_image, width=12)
+restore_button.grid(row=0, column=2, padx=10)
 
 # Botão para pixelizar imagem
-pixelate_button = Button(root, text="Pixelate", command=pixelate_image)
-pixelate_button.pack(side=LEFT, padx=20)
+pixelate_button = Button(button_frame, text="Pixelizar", command=pixelate_image, width=12)
+pixelate_button.grid(row=0, column=3, padx=10)
 
 # Botão para adicionar ruído aleatório
-random_noise_button = Button(root, text="Random Noise", command=add_random_noise)
-random_noise_button.pack(side=LEFT, padx=20)
+random_noise_button = Button(button_frame, text="Ruído", command=add_random_noise, width=12)
+random_noise_button.grid(row=0, column=4, padx=10)
 
 # Rótulo para exibir emoções
-emotion_label = Label(root, text="Emoções detectadas aqui", justify=LEFT)
-emotion_label.pack(pady=20)
-
-# Botão para salvar a imagem
-save_button = Button(root, text="Save Image", command=save_image)
-save_button.pack(side=LEFT, padx=20)
+emotion_label = Label(root, text="Emoções detectadas aqui", justify=LEFT, wraplength=500)
+emotion_label.pack(pady=10)
 
 # Executar a interface Tkinter
 root.mainloop()
