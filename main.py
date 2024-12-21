@@ -1,145 +1,154 @@
-import cv2
 import os
-import random
+import cv2
 import numpy as np
 from tkinter import *
-from tkinter import filedialog
 from tkinter import messagebox
-from deepface import DeepFace
 from PIL import Image, ImageTk
+from teste import ImageProcessor, EmotionAnalyzer, ImageEffect
 
-# Função para carregar e mostrar imagem
-def browse_image():
-    file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png")])
-    if file_path:
-        global img_path, original_image
-        img_path = file_path
+ROOT_FOLDER = "Pessoas"
+img_path = None
+original_image = None
+current_image = None  # Imagem atualmente exibida
+
+# Listar imagens na pasta
+def list_all_images():
+    valid_extensions = (".jpg", ".jpeg", ".png")
+    image_files = []
+    for root, dirs, files in os.walk(ROOT_FOLDER):
+        for file in files:
+            if file.lower().endswith(valid_extensions):
+                image_files.append(os.path.join(root, file))
+    return image_files
+
+# Seleção de imagem
+def open_image_selection():
+    global img_path, original_image, current_image
+
+    selection_window = Toplevel(root)
+    selection_window.title("Selecione uma imagem")
+    selection_window.geometry("500x400")
+
+    images = list_all_images()
+    if not images:
+        messagebox.showerror("Erro", "Nenhuma imagem encontrada na pasta 'Pessoas'.")
+        selection_window.destroy()
+        return
+
+    listbox = Listbox(selection_window, selectmode=SINGLE, height=15, width=60)
+    for img in images:
+        listbox.insert(END, img)
+    listbox.pack(pady=10)
+
+    def load_selected_image():
+        global img_path, original_image, current_image
+        selected_index = listbox.curselection()
+        if not selected_index:
+            messagebox.showerror("Erro", "Nenhuma imagem selecionada.")
+            return
+
+        img_path = listbox.get(selected_index)
         img = cv2.imread(img_path)
-        original_image = img.copy()  # Salva a imagem original para restaurar depois
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Converter para RGB para o tkinter exibir corretamente
-        img = cv2.resize(img, (400, 400))  # Redimensionar a imagem para o tamanho exibido
-        img = ImageTk.PhotoImage(Image.fromarray(img))
-        panel.config(image=img)
-        panel.image = img
+        if img is None:
+            messagebox.showerror("Erro", "Erro ao carregar a imagem.")
+            return
 
-# Função para restaurar a imagem ao seu estado original
+        original_image = img.copy()
+        current_image = img.copy()
+        display_image(img)
+        selection_window.destroy()
+
+    load_button = Button(selection_window, text="Carregar", command=load_selected_image)
+    load_button.pack(pady=10)
+
 def restore_image():
-    if not img_path or original_image is None:
+    global original_image, current_image
+    if original_image is None:
         messagebox.showerror("Erro", "Nenhuma imagem carregada.")
         return
 
-    img = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, (400, 400))  # Redimensionar para o tamanho exibido
-    img = ImageTk.PhotoImage(Image.fromarray(img))
+    current_image = original_image.copy()
+    display_image(original_image)
 
-    panel.config(image=img)
-    panel.image = img
-
-# Função para aplicar DeepFace e mostrar emoções
-def recognize_emotions():
-    if not img_path:
+def pixelate_image():
+    global current_image
+    if current_image is None:
         messagebox.showerror("Erro", "Nenhuma imagem carregada.")
         return
 
     try:
-        result = DeepFace.analyze(img_path=img_path, actions=['emotion'])
-        result = result[0]  # Pega o primeiro item da lista
-
-        # Exibe as emoções e suas porcentagens
-        emotions_text = "Emoções detectadas:\n"
-        total_score = sum(result['emotion'].values())
-        for emotion, score in result['emotion'].items():
-            percentage = (score / total_score) * 100
-            emotions_text += f"{emotion.capitalize()}: {percentage:.2f}%\n"
-        
-        emotion_label.config(text=emotions_text)
-
+        processor = ImageEffect(image_path=None)  # Caminho não necessário para operações no array
+        processor.image = current_image  # Define a imagem atual
+        current_image = processor.pixelate(pixel_size=10)  # Aplica pixelização
+        display_image(current_image)
     except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao analisar a imagem: {str(e)}")
+        messagebox.showerror("Erro", f"Erro ao pixelizar a imagem: {e}")
 
-# Função para pixelizar a imagem
-def pixelate_image():
-    if not img_path:
+def add_noise_image():
+    global current_image
+    if current_image is None:
         messagebox.showerror("Erro", "Nenhuma imagem carregada.")
         return
 
-    img = cv2.imread(img_path)
-    height, width, _ = img.shape
+    try:
+        processor = ImageEffect(image_path=None)  # Caminho não necessário para operações no array
+        processor.image = current_image  # Define a imagem atual
+        current_image = processor.add_noise(noise_level=0.7)  # Adiciona ruído
+        display_image(current_image)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao adicionar ruído: {e}")
 
-    # Diminuir o tamanho da imagem (para efeito de pixelização)
-    small = cv2.resize(img, (width // 10, height // 10), interpolation=cv2.INTER_LINEAR)
-    pixelated = cv2.resize(small, (width, height), interpolation=cv2.INTER_NEAREST)
 
-    cv2.imwrite('pixelated_image.jpg', pixelated)
-    img = cv2.cvtColor(pixelated, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, (400, 400))  # Redimensionar para o tamanho menor
-    img = ImageTk.PhotoImage(Image.fromarray(img))
-
-    panel.config(image=img)
-    panel.image = img
-
-# Função para adicionar ruído aleatório à imagem
-def add_random_noise():
-    if not img_path:
+def evaluate_emotions():
+    global current_image
+    if current_image is None:
         messagebox.showerror("Erro", "Nenhuma imagem carregada.")
         return
 
-    img = cv2.imread(img_path)
-    row, col, ch = img.shape
-    mean = 0
-    sigma = 25
-    gauss = np.random.normal(mean, sigma, (row, col, ch))
-    noisy = np.array(img, dtype=float) + gauss
-    noisy = np.clip(noisy, 0, 255).astype(np.uint8)
+    try:
+        # Analisar emoções usando o EmotionAnalyzer
+        processor = EmotionAnalyzer(image_path=None)  # Caminho não necessário, passaremos o array
+        emotions = processor.analyze_emotions(image_array=current_image)
+        result_text = "\n".join([f"{emotion}: {value:.2f}%" for emotion, value in emotions.items()])
+        messagebox.showinfo("Emoções Detectadas", result_text)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao avaliar emoções: {e}")
 
-    cv2.imwrite('noisy_image.jpg', noisy)
-    img = cv2.cvtColor(noisy, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, (400, 400))  # Redimensionar para o tamanho menor
-    img = ImageTk.PhotoImage(Image.fromarray(img))
 
-    panel.config(image=img)
-    panel.image = img
 
-# Configuração da interface Tkinter
+def display_image(image):
+    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    img_pil = Image.fromarray(img_rgb)
+    img_pil = img_pil.resize((375, 500), Image.ANTIALIAS)
+    img_tk = ImageTk.PhotoImage(img_pil)
+    panel.config(image=img_tk)
+    panel.image = img_tk
+
+
+
 root = Tk()
-root.title("Reconhecimento de Emoções")
-root.geometry("600x700")  # Dimensão da janela
+root.title("Gerenciamento de Imagens")
+root.geometry("650x650")
 
-img_path = None
-original_image = None  # Variável para armazenar a imagem original
-
-# Painel para exibir a imagem
 panel = Label(root)
 panel.pack(pady=10)
 
-# Container para os botões, alinhando-os no centro
 button_frame = Frame(root)
 button_frame.pack(pady=20)
 
-# Botão para carregar imagem
-browse_button = Button(button_frame, text="Pesquisar", command=browse_image, width=12)
-browse_button.grid(row=0, column=0, padx=10)
+list_button = Button(button_frame, text="Imagem", command=open_image_selection, width=15)
+list_button.grid(row=0, column=0, padx=5)
 
-# Botão para reconhecer emoções
-recognize_button = Button(button_frame, text="Reconhecer", command=recognize_emotions, width=12)
-recognize_button.grid(row=0, column=1, padx=10)
+restore_button = Button(button_frame, text="Restaurar", command=restore_image, width=15)
+restore_button.grid(row=0, column=1, padx=5)
 
-# Botão para restaurar imagem ao normal
-restore_button = Button(button_frame, text="Normal", command=restore_image, width=12)
-restore_button.grid(row=0, column=2, padx=10)
+pixelate_button = Button(button_frame, text="Pixelizar", command=pixelate_image, width=15)
+pixelate_button.grid(row=0, column=2, padx=5)
 
-# Botão para pixelizar imagem
-pixelate_button = Button(button_frame, text="Pixelizar", command=pixelate_image, width=12)
-pixelate_button.grid(row=0, column=3, padx=10)
+noise_button = Button(button_frame, text="Adicionar Ruído", command=add_noise_image, width=15)
+noise_button.grid(row=0, column=3, padx=5)
 
-# Botão para adicionar ruído aleatório
-random_noise_button = Button(button_frame, text="Ruído", command=add_random_noise, width=12)
-random_noise_button.grid(row=0, column=4, padx=10)
+emotion_button = Button(button_frame, text="Avaliar Emoções", command=evaluate_emotions, width=15)
+emotion_button.grid(row=0, column=4, padx=5)
 
-# Rótulo para exibir emoções
-emotion_label = Label(root, text="Emoções detectadas aqui", justify=LEFT, wraplength=500)
-emotion_label.pack(pady=10)
-
-# Executar a interface Tkinter
 root.mainloop()
-
